@@ -230,18 +230,20 @@ def main():
                     messages = getattr(
                         full_chat, "messages", []
                     ) or []
+
                     log.info(
-    "Чат %s: найдено сообщений: %s",
-    chat.id,
-    len(messages),
-)
-if messages:
-    last = messages[-1]
-    log.info(
-        "Последнее сообщение: id=%s, автор=%s",
-        getattr(last, "id", None),
-        getattr(last, "author", None),
-    )
+                        "Чат %s: найдено сообщений: %s",
+                        chat.id,
+                        len(messages),
+                    )
+
+                    if messages:
+                        last = messages[-1]
+                        log.info(
+                            "Последнее сообщение: id=%s, автор=%s",
+                            getattr(last, "id", None),
+                            getattr(last, "author", None),
+                        )
 
                     for msg in messages[-10:]:
                         message_id = getattr(msg, "id", None)
@@ -251,7 +253,10 @@ if messages:
                         if message_id is None:
                             continue
 
-                        if not message_text or not message_text.strip():
+                        if not isinstance(message_text, str):
+                            continue
+
+                        if not message_text.strip():
                             continue
 
                         if author == account.username:
@@ -266,7 +271,6 @@ if messages:
                         )
 
                         reply = get_ai_reply(message_text)
-
                         account.send_message(chat.id, reply)
                         mark_answered(message_id)
 
