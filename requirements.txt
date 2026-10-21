@@ -1,5 +1,4 @@
-beautifulsoup4
-requests_toolbelt
 FunPayAPI
 flask
 requests
+beautifulsoup4
