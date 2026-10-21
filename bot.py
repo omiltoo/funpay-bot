@@ -5,12 +5,12 @@ from flask import Flask
 import requests
 from FunPayAPI import Account
 
-# 1. Веб-сервер Flask для удержания порта на Render
+# 1. Веб-сервер Flask для удерживания порта на Render
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is active!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -27,13 +27,6 @@ SYSTEM_PROMPT = (
     "Цена: 6 руб. Выдача через Trade, требуется 1 престиж (Prestige 1). "
     "Отвечай кратко и вежливо."
 )
-
-print("Инициализация аккаунта FunPay...")
-try:
-    account = Account(GOLDEN_KEY).get()
-    print(f"Бот успешно запущен: {account.username}")
-except Exception as e:
-    print(f"Ошибка авторизации: {e}")
 
 def get_ai_reply(user_message):
     try:
@@ -56,36 +49,50 @@ def get_ai_reply(user_message):
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        print(f"Ошибка ИИ: {e}")
+        print(f"[AI ERROR] Ошибка ИИ: {e}")
         return "Здравствуйте! Продавец скоро ответит вам."
 
-# 3. Основной цикл проверки чатов
+# 3. Авторизация аккаунта
+print("[SYSTEM] Подключение к FunPay...")
+account = Account(GOLDEN_KEY).get()
+print(f"[SYSTEM] Бот успешно запущен от имени: {account.username}")
+
 last_msg_ids = {}
 
-print("Запуск цикла проверки сообщений...")
+# 4. Основной цикл проверки входящих сообщений
 while True:
     try:
+        # Получаем актуальный список чатов
         chats = account.get_chats()
+        
         for chat in chats:
             chat_id = chat.id
-            if chat.unread:
-                chat_details = account.get_chat(chat_id)
-                messages = chat_details.messages
-                if messages:
-                    last_msg = messages[-1]
-                    # Отвечаем только если последнее сообщение написал не бот
-                    if last_msg.author != account.username:
-                        msg_id = last_msg.id
-                        if last_msg_ids.get(chat_id) != msg_id:
-                            print(f"Новое сообщение от {last_msg.author}: {last_msg.text}")
-                            
-                            # Получаем ответ от ИИ и отправляем
-                            reply = get_ai_reply(last_msg.text)
-                            account.send_message(chat_id, reply)
-                            print(f"Отправлен ответ: {reply}")
-                            
-                            last_msg_ids[chat_id] = msg_id
+            
+            # Получаем подробности диалога
+            chat_details = account.get_chat(chat_id)
+            messages = chat_details.messages
+            
+            if messages:
+                last_msg = messages[-1]
+                
+                # Проверяем, что сообщение прислал покупатель (а не сам бот)
+                if last_msg.author != account.username:
+                    msg_id = last_msg.id
+                    
+                    # Проверяем, ответил ли бот уже на это конкретное сообщение
+                    if last_msg_ids.get(chat_id) != msg_id:
+                        print(f"[NEW MSG] Сообщение от {last_msg.author} (Чат {chat_id}): {last_msg.text}")
+                        
+                        # Генерируем ответ и отправляем
+                        reply = get_ai_reply(last_msg.text)
+                        account.send_message(chat_id, reply)
+                        print(f"[REPLY SENT] Ответ в чат {chat_id}: {reply}")
+                        
+                        # Запоминаем ID отвеченного сообщения
+                        last_msg_ids[chat_id] = msg_id
+
     except Exception as e:
-        print(f"Ошибка в цикле чатов: {e}")
-        
-    time.sleep(5)
+        print(f"[LOOP ERROR] Ошибка в цикле: {e}")
+
+    # Интервал проверки сообщений в секундах
+    time.sleep(6)
