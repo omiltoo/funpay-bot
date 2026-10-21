@@ -221,7 +221,9 @@ def main():
     while True:
         try:
             account.get()
-            chats = account.get_chats() or []
+            chats = account.get_chats(update=True)
+chats = list(chats.values()) if isinstance(chats, dict) else list(chats or [])
+log.info("Найдено чатов после обновления: %s", len(chats))
             log.info("Найдено чатов: %s", len(chats))
 
             for chat in chats:
