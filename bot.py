@@ -222,6 +222,7 @@ def main():
         try:
             account.get()
             chats = account.get_chats() or []
+            log.info("Найдено чатов: %s", len(chats))
 
             for chat in chats:
                 try:
@@ -229,6 +230,18 @@ def main():
                     messages = getattr(
                         full_chat, "messages", []
                     ) or []
+                    log.info(
+    "Чат %s: найдено сообщений: %s",
+    chat.id,
+    len(messages),
+)
+if messages:
+    last = messages[-1]
+    log.info(
+        "Последнее сообщение: id=%s, автор=%s",
+        getattr(last, "id", None),
+        getattr(last, "author", None),
+    )
 
                     for msg in messages[-10:]:
                         message_id = getattr(msg, "id", None)
