@@ -1,9 +1,25 @@
 import os
+import threading
 import time
+from flask import Flask
 import requests
 from FunPayAPI import Account
 
-# Ключи будут автоматически подтягиваться из Render (Environment Variables)
+# 1. Запуск веб-сервера для Render (чтобы открылся порт)
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# Запускаем сайт в отдельном фоновом потоке
+threading.Thread(target=run_flask, daemon=True).start()
+
+# 2. Основная логика FunPay бота
 GOLDEN_KEY = os.environ.get("GOLDEN_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
@@ -34,7 +50,6 @@ def get_ai_reply(user_message):
     except Exception as e:
         print(f"Ошибка ИИ: {e}")
         return "Здравствуйте! Продавец скоро ответит вам."
-        # Бесконечный цикл, чтобы бот не выключался на Render
+
 while True:
     time.sleep(1)
-
