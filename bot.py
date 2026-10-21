@@ -1,16 +1,16 @@
 import os
 import threading
-import time
 from flask import Flask
 import requests
 from FunPayAPI import Account
+from FunPayAPI.types import MessageTypes
 
-# 1. Веб-сервер Flask для удерживания порта на Render
+# 1. Веб-сервер Flask для удержания порта на Render
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is active!"
+    return "Bot is running!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -49,50 +49,35 @@ def get_ai_reply(user_message):
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        print(f"[AI ERROR] Ошибка ИИ: {e}")
+        print(f"[AI ERROR] {e}")
         return "Здравствуйте! Продавец скоро ответит вам."
 
-# 3. Авторизация аккаунта
+# 3. Авторизация и запуск прослушивания через Runner
 print("[SYSTEM] Подключение к FunPay...")
 account = Account(GOLDEN_KEY).get()
 print(f"[SYSTEM] Бот успешно запущен от имени: {account.username}")
 
-last_msg_ids = {}
+# Получаем объект ранера для отслеживания событий
+runner = account.get_runner()
 
-# 4. Основной цикл проверки входящих сообщений
-while True:
-    try:
-        # Получаем актуальный список чатов
-        chats = account.get_chats()
-        
-        for chat in chats:
-            chat_id = chat.id
-            
-            # Получаем подробности диалога
-            chat_details = account.get_chat(chat_id)
-            messages = chat_details.messages
-            
-            if messages:
-                last_msg = messages[-1]
-                
-                # Проверяем, что сообщение прислал покупатель (а не сам бот)
-                if last_msg.author != account.username:
-                    msg_id = last_msg.id
-                    
-                    # Проверяем, ответил ли бот уже на это конкретное сообщение
-                    if last_msg_ids.get(chat_id) != msg_id:
-                        print(f"[NEW MSG] Сообщение от {last_msg.author} (Чат {chat_id}): {last_msg.text}")
-                        
-                        # Генерируем ответ и отправляем
-                        reply = get_ai_reply(last_msg.text)
-                        account.send_message(chat_id, reply)
-                        print(f"[REPLY SENT] Ответ в чат {chat_id}: {reply}")
-                        
-                        # Запоминаем ID отвеченного сообщения
-                        last_msg_ids[chat_id] = msg_id
+@runner.on_message()
+def handle_new_message(message):
+    # Игнорируем собственные сообщения бота
+    if message.author == account.username:
+        return
+    
+    # Обрабатываем только текстовые сообщения
+    if message.type != MessageTypes.TEXT:
+        return
 
-    except Exception as e:
-        print(f"[LOOP ERROR] Ошибка в цикле: {e}")
+    print(f"[NEW MESSAGE] От {message.author} в чате {message.chat_id}: {message.text}")
+    
+    # Генерируем ответ через ИИ
+    reply_text = get_ai_reply(message.text)
+    
+    # Отправляем ответ в тот же чат
+    account.send_message(message.chat_id, reply_text)
+    print(f"[REPLY SENT] В чат {message.chat_id}: {reply_text}")
 
-    # Интервал проверки сообщений в секундах
-    time.sleep(6)
+# Запуск постоянного прослушивания чата
+runner.listen(requests_delay=5)
