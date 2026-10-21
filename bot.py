@@ -1,40 +1,41 @@
 import os
 import threading
+import time
 from flask import Flask
 import requests
 from FunPayAPI import Account
-from FunPayAPI.types import MessageTypes
 
-# ==========================================
-# 1. Веб-сервер Flask (для обхода ограничений Render)
-# ==========================================
+# 1. Веб-сервер Flask для удержания порта на Render
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is active and running!"
+    return "Bot is running!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Запускаем сайт в отдельном фоновом потоке
 threading.Thread(target=run_flask, daemon=True).start()
 
-# ==========================================
-# 2. Переменные окружения и ИИ
-# ==========================================
+# 2. Настройки бота и ИИ
 GOLDEN_KEY = os.environ.get("GOLDEN_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 SYSTEM_PROMPT = (
     "Ты вежливый менеджер по продажам Lucky Arrow в YBA (Roblox) на FunPay. "
-    "Цена: 6 руб. Выдача происходит через Trade в игре, для сделки требуется 1 престиж (Prestige 1). "
-    "Отвечай кратко, вежливо и понятно."
+    "Цена: 6 руб. Выдача через Trade, требуется 1 престиж (Prestige 1). "
+    "Отвечай кратко и вежливо."
 )
 
+print("Инициализация аккаунта FunPay...")
+try:
+    account = Account(GOLDEN_KEY).get()
+    print(f"Бот успешно запущен: {account.username}")
+except Exception as e:
+    print(f"Ошибка авторизации: {e}")
+
 def get_ai_reply(user_message):
-    """Отправляет запрос к OpenRouter и возвращает ответ от AI."""
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -55,36 +56,36 @@ def get_ai_reply(user_message):
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        print(f"Ошибка получения ответа от ИИ: {e}")
-        return "Здравствуйте! Продавец сейчас занят, но скоро ответит вам."
+        print(f"Ошибка ИИ: {e}")
+        return "Здравствуйте! Продавец скоро ответит вам."
 
-# ==========================================
-# 3. Основная логика бота FunPay
-# ==========================================
-print("Инициализация аккаунта FunPay...")
-acc = Account(GOLDEN_KEY).get()
-print(f"Бот успешно запущен от имени: {acc.username}")
+# 3. Основной цикл проверки чатов
+last_msg_ids = {}
 
-# Создаем прослушиватель событий (runner)
-runner = acc.get_runner()
-
-# Подписываемся на новые сообщения
-@runner.on_message()
-def handle_message(message):
-    # Игнорируем собственные сообщения бота и системные уведомления
-    if message.author == acc.username or message.type != MessageTypes.TEXT:
-        return
-
-    chat_id = message.chat_id
-    user_text = message.text
-    print(f"Новое сообщение в чате {chat_id} от {message.author}: {user_text}")
-
-    # Генерируем ответ через ИИ
-    reply_text = get_ai_reply(user_text)
-
-    # Отправляем ответ покупателю
-    acc.send_message(chat_id, reply_text)
-    print(f"Отправлен ответ в чат {chat_id}: {reply_text}")
-
-# Запускаем бесконечный прослушиватель чатов
-runner.listen()
+print("Запуск цикла проверки сообщений...")
+while True:
+    try:
+        chats = account.get_chats()
+        for chat in chats:
+            chat_id = chat.id
+            if chat.unread:
+                chat_details = account.get_chat(chat_id)
+                messages = chat_details.messages
+                if messages:
+                    last_msg = messages[-1]
+                    # Отвечаем только если последнее сообщение написал не бот
+                    if last_msg.author != account.username:
+                        msg_id = last_msg.id
+                        if last_msg_ids.get(chat_id) != msg_id:
+                            print(f"Новое сообщение от {last_msg.author}: {last_msg.text}")
+                            
+                            # Получаем ответ от ИИ и отправляем
+                            reply = get_ai_reply(last_msg.text)
+                            account.send_message(chat_id, reply)
+                            print(f"Отправлен ответ: {reply}")
+                            
+                            last_msg_ids[chat_id] = msg_id
+    except Exception as e:
+        print(f"Ошибка в цикле чатов: {e}")
+        
+    time.sleep(5)
