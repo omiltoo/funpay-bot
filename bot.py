@@ -1,16 +1,16 @@
 import os
 import threading
+import time
 from flask import Flask
 import requests
 from FunPayAPI import Account
-from FunPayAPI.types import MessageTypes
 
-# 1. Веб-сервер Flask для удержания порта на Render
+# 1. Веб-сервер, чтобы Render не отключал бота
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Bot is running!"
+    return "Bot is alive!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -18,7 +18,7 @@ def run_flask():
 
 threading.Thread(target=run_flask, daemon=True).start()
 
-# 2. Настройки бота и ИИ
+# 2. Ключи и настройки
 GOLDEN_KEY = os.environ.get("GOLDEN_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
@@ -28,56 +28,61 @@ SYSTEM_PROMPT = (
     "Отвечай кратко и вежливо."
 )
 
-def get_ai_reply(user_message):
+def get_ai_reply(text):
     try:
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "openai/gpt-3.5-turbo",
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message}
-            ]
-        }
         response = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data,
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "openai/gpt-3.5-turbo",
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": text}
+                ]
+            },
             timeout=10
         )
         return response.json()['choices'][0]['message']['content']
     except Exception as e:
-        print(f"[AI ERROR] {e}")
-        return "Здравствуйте! Продавец скоро ответит вам."
+        print(f"Ошибка ИИ: {e}")
+        return "Здравствуйте! Продавец скоро вам ответит."
 
-# 3. Авторизация и запуск прослушивания через Runner
-print("[SYSTEM] Подключение к FunPay...")
-account = Account(GOLDEN_KEY).get()
-print(f"[SYSTEM] Бот успешно запущен от имени: {account.username}")
+# 3. Подключение к FunPay
+print("Авторизация в FunPay...")
+acc = Account(GOLDEN_KEY).get()
+print(f"Успешный вход! Логин: {acc.username}")
 
-# Получаем объект ранера для отслеживания событий
-runner = account.get_runner()
+answered_messages = set()
 
-@runner.on_message()
-def handle_new_message(message):
-    # Игнорируем собственные сообщения бота
-    if message.author == account.username:
-        return
-    
-    # Обрабатываем только текстовые сообщения
-    if message.type != MessageTypes.TEXT:
-        return
-
-    print(f"[NEW MESSAGE] От {message.author} в чате {message.chat_id}: {message.text}")
-    
-    # Генерируем ответ через ИИ
-    reply_text = get_ai_reply(message.text)
-    
-    # Отправляем ответ в тот же чат
-    account.send_message(message.chat_id, reply_text)
-    print(f"[REPLY SENT] В чат {message.chat_id}: {reply_text}")
-
-# Запуск постоянного прослушивания чата
-runner.listen(requests_delay=5)
+# 4. Бесконечный цикл проверки
+while True:
+    try:
+        # Принудительно обновляем данные аккаунта
+        acc.get()
+        chats = acc.get_chats()
+        
+        for chat in chats:
+            # Получаем диалог
+            full_chat = acc.get_chat(chat.id)
+            if full_chat.messages:
+                last_msg = full_chat.messages[-1]
+                
+                # Если сообщение от покупателя и мы на него еще не отвечали
+                if last_msg.author != acc.username and last_msg.id not in answered_messages:
+                    print(f"Новое сообщение от {last_msg.author}: {last_msg.text}")
+                    
+                    # Генерируем и отправляем ответ
+                    reply = get_ai_reply(last_msg.text)
+                    acc.send_message(chat.id, reply)
+                    print(f"Ответ отправлен: {reply}")
+                    
+                    # Запоминаем ID сообщения
+                    answered_messages.add(last_msg.id)
+                    
+    except Exception as e:
+        print(f"Ошибка цикла: {e}")
+        
+    time.sleep(4)
