@@ -34,3 +34,7 @@ def get_ai_reply(user_message):
     except Exception as e:
         print(f"Ошибка ИИ: {e}")
         return "Здравствуйте! Продавец скоро ответит вам."
+        # Бесконечный цикл, чтобы бот не выключался на Render
+while True:
+    time.sleep(1)
+
