@@ -1,10 +1,9 @@
 import inspect
-import FunPayAPI
 from FunPayAPI import Account
 
-print("Путь к библиотеке:", FunPayAPI.__file__)
-print("\nМетод Account.get:")
-print(inspect.getsource(Account.get))
-
-print("\nМетод Account.get_chats:")
-print(inspect.getsource(Account.get_chats))
+for name in ("get", "get_chats"):
+    method = getattr(Account, name)
+    print(f"\n===== Account.{name} =====", flush=True)
+    print("Файл:", inspect.getfile(method), flush=True)
+    print("Строки:", inspect.getsourcelines(method)[1], flush=True)
+    print(inspect.getsource(method), flush=True)
