@@ -207,7 +207,8 @@ def main():
     log.info("Подключение к FunPay...")
 
     try:
-        account = Account(GOLDEN_KEY).get()
+        account = Account(GOLDEN_KEY)
+account.get(update_phpsessid=True)
     except Exception as e:
         log.error("Не удалось войти в FunPay.")
         log_funpay_error(e)
