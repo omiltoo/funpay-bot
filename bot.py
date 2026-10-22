@@ -221,10 +221,18 @@ def main():
     while True:
         try:
             account.get()
+
             chats = account.get_chats(update=True)
-chats = list(chats.values()) if isinstance(chats, dict) else list(chats or [])
-log.info("Найдено чатов после обновления: %s", len(chats))
-            log.info("Найдено чатов: %s", len(chats))
+            chats = (
+                list(chats.values())
+                if isinstance(chats, dict)
+                else list(chats or [])
+            )
+
+            log.info(
+                "Найдено чатов после обновления: %s",
+                len(chats),
+            )
 
             for chat in chats:
                 try:
@@ -239,13 +247,8 @@ log.info("Найдено чатов после обновления: %s", len(ch
                         len(messages),
                     )
 
-                    if messages:
-                        last = messages[-1]
-                        log.info(
-                            "Последнее сообщение: id=%s, автор=%s",
-                            getattr(last, "id", None),
-                            getattr(last, "author", None),
-                        )
+                    if not messages:
+                        continue
 
                     for msg in messages[-10:]:
                         message_id = getattr(msg, "id", None)
